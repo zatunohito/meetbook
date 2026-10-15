@@ -1,36 +1,114 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MEET BOOK
 
-## Getting Started
+> 本を探すのではなく、まだ知らない一冊と出会う。
+> 本をきっかけに、人・場所・価値観・新しい自分と出会う。
 
-First, run the development server:
+長崎の読者・書店・小規模出版社をつなぐ読書プラットフォーム。
+
+- Next.js 16（App Router）/ TypeScript / Tailwind CSS v4 / Lucide
+- Supabase（Postgres）。DB へのアクセスはすべてサーバー側から service_role で行い、RLS で公開キーからの直接アクセスを遮断しています。
+
+## セットアップ
+
+### 1. Supabase プロジェクトを作る
+
+1. https://supabase.com/dashboard で新しいプロジェクトを作成（リージョンは Tokyo 推奨）
+2. **SQL Editor** で次の2ファイルを順に実行
+   - `supabase/migrations/20261011000000_init.sql`（テーブル作成）
+   - `supabase/seed.sql`（書店10店・出版社13社）
+   - `supabase/seed_books.sql`（長崎の出版社の刊行物104冊）
+   - `supabase/seed_photos.sql`（書店の周辺・建物の写真。Wikimedia Commons）
+3. **Project Settings → API** から `Project URL` と `service_role` キーを控える
+
+> Supabase CLI を使う場合は `pnpm exec supabase link --project-ref <ref>` → `pnpm exec supabase db push` でも適用できます。
+
+### 2. 環境変数
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.local.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` に以下を設定します（このファイルは Git にコミットされません）。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| 変数 | 内容 |
+| --- | --- |
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role キー（サーバー専用。`NEXT_PUBLIC_` を付けない） |
+| `SESSION_SECRET` | 32文字以上のランダム文字列。`openssl rand -base64 48` で生成 |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | 管理画面 `/admin` の Basic 認証（パスワード12文字以上） |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. 起動
 
-## Learn More
+```bash
+pnpm install
+pnpm dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+http://localhost:3000 を開きます。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| URL | 内容 |
+| --- | --- |
+| `/welcome` | 役割の選択（読者／書店／出版社） |
+| `/home` ほか | 読者画面（ホーム / MEET / 本屋 / つながり / プロフィール） |
+| `/store` | 書店画面（受信箱・店舗情報・取扱の本／今週の本・イベント） |
+| `/publisher` | 出版社ダッシュボード |
+| `/admin` | 管理画面（Basic 認証） |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### コマンド
 
-## Deploy on Vercel
+```bash
+pnpm dev      # 開発サーバー
+pnpm build    # 本番ビルド
+pnpm test     # 推薦ロジックのユニットテスト
+pnpm lint
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## データの方針（架空データ禁止）
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- シード（`supabase/seed.sql`）には書店10店・出版社13社を登録しています。出典は指示書の対象リストと、試作版（base44）に登録されていた店舗・出版社情報です。
+  - 試作版の調査メモ（「※要確認」など）は読者には表示せず、管理者メモ（`admin_note`）に残しています。
+  - 店員メッセージは4店：BOOKSライデン・ひとやすみ書店は試作版の文面、好文堂書店・Shirokiji Books は Web 記事からの短い引用（出典を話し手欄に明記）。本人確認後、書店画面で差し替えられます。
+  - 試作版の書籍4冊は ISBN がなく実在未確認のため登録していません。
+  - 写真は試作版のストレージを参照しています。自前のストレージ（Supabase Storage など）へ移してください。
+  - 住所・営業時間・電話・公式URLは Web 調査で出典を確認したものを入れ、出典URLを `sources` に保存しています（調査記録：`docs/research/stores-2026-10.md`）。
+  - 説明文を確認できなかった書店（「長崎書店（大村市）」＝実在は熊本市の書店、ほか大村市・住吉の6店）は登録していません。
+  - シードは何度流しても安全で、管理画面で入力済みの値は上書きしません。
+- 書籍は管理画面または出版社画面から登録します。ISBN を入力すると **openBD** の公開書誌データを下書きとして取り込めます（出典を記録）。
+- **取扱書店（在庫）** は書店で確認できたものだけを登録し、確認日時を保持します。
+- **感想** は投稿者表記と出典が必須です。
+- 未登録の項目は画面上「未登録」「準備中」と表示し、ダミーで埋めません。
+- 管理画面では書店・出版社・書籍・感想・イベント・お知らせを物理削除せず、「公開／非公開」で管理します（在庫・関係性の紐付けのみ解除可能）。
+
+### 書籍データの取り込み
+
+`supabase/seed_books.sql` は `node scripts/import-books.mjs` で生成しています。国立国会図書館サーチ（書誌・NDC・件名）と openBD（書影・内容紹介）から、長崎の出版社の刊行物を新しい順に取得します。ジャンルは NDC と件名から自動で対応づけ、書誌ページの URL を `source_url` に保存します。取扱書店（在庫）は確認できないため登録しません。
+
+### 写真
+
+書店・出版社の写真は、書店画面（店舗情報）・出版社画面・管理画面からアップロードします。ブラウザ側で長辺 2000px の JPEG に縮小してから送信し、1件あたり最大20枚、1枚目がカードやページのトップに使われます。
+
+- 本番（Supabase）：初回アップロード時に Storage の公開バケット `photos` を自動作成して保存します。
+- ローカル（`npm run dev` で `.env.local` が無い場合）：`.local-dev/uploads` に保存し、`/media/...` で配信します。
+- 初期データの写真は Wikimedia Commons の自由ライセンス写真で、お店そのものではなく「お店が入る建物・周辺」の写真です（`node scripts/import-photos.mjs` で生成）。撮影者・ライセンス・出典を写真ごとに `photo_meta` に保存し、ギャラリーと拡大表示に表示しています。お店から写真が届いたら差し替えてください。
+- 掲載の許可を得た写真のみ登録してください。写真ごとのクレジット（例：写真提供 ○○）も設定できます。
+
+## 推薦ロジック（`src/lib/match.ts`）
+
+すべて登録済みの実データとアンケート回答から、理由文つきで算出します。
+
+- **MEET / あなたへのおすすめ**：興味テーマ・好きなジャンルとの一致、「最近考えていること」「好きな本」の語と本文・キーワードの一致、MEET 済みの本と同じ著者・出版社、長崎の出版社か、取扱書店（つながっている店 > よく行く地域の店 > その他）。読者側の根拠がない本は在庫だけでは推薦しません。
+- **今日の MEET**：おすすめ上位3冊から日替わりで1冊。
+- **偶然の一冊**：普段読むジャンルと重ならない本のうち、隣接ジャンルとの「接点」（`GENRE_BRIDGES`）や「気になるジャンル」を根拠に選び、理由を必ず表示。挑戦度が低いほど接点のある本に限定します。
+- **本屋との相性**：得意ジャンル(40)・雰囲気(30)・過ごし方(20)・地域(10)のうち、**書店側で登録済みの項目だけ** で 0〜100 に正規化。1項目も無ければ「情報登録待ち」と表示します。
+- プロフィールを保存すると次の表示から即座に反映されます（キャッシュなしの動的レンダリング）。
+
+## 相談・メッセージ
+
+- `threads`（`thread_id`, `reader_id`, `store_id`, `book_id`, `subject`, `status`, 既読時刻）と `messages`（`message_id`, `thread_id`, `body`, `sender_role`）。
+- 読者：本の詳細／書店ページから送信 → 「つながり › 相談」で履歴・返信・ステータス確認。
+- 書店：受信箱でステータス別に管理、返信すると自動で「対応中」に。読者が対応済みスレッドに書き込むと「未対応」に戻ります。
+
+## 試走版の制限
+
+- 書店・出版社画面は `/welcome` で選ぶだけで入れます。本番では事業者ごとのログイン（Supabase Auth など）に置き換えてください。
+- 読者はアカウントなし（署名付き Cookie）です。ログアウトすると同じ読者データには戻れません。
